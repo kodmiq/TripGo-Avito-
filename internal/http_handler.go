@@ -24,21 +24,33 @@ func NewHandler(svc *TripService, ping func(ctx context.Context) error, readyTim
 	return &Handler{svc: svc, ping: ping, readyTimeout: readyTimeout}
 }
 
-// CreateTrip игнорирует Idempotency-Key: это задание со звёздочкой.
-func (h *Handler) CreateTrip(w http.ResponseWriter, r *http.Request, _ api.CreateTripParams) {
+func (h *Handler) CreateTrip(w http.ResponseWriter, r *http.Request, params api.CreateTripParams) {
 	in, err := decodeCreateTrip(r)
 	if err != nil {
 		h.writeDecodeError(w, r, err)
 		return
 	}
 
-	trip, err := h.svc.Create(r.Context(), in)
+	trip, created, err := h.svc.Create(r.Context(), in, idempotencyKey(params))
 	if err != nil {
 		h.writeServiceError(w, r, err)
 		return
 	}
+	if !created {
+		slog.Info("idempotent replay", "trip_id", trip.ID.String(), "status", trip.Status)
+		writeTrip(w, http.StatusOK, trip, "")
+		return
+	}
 	slog.Info("trip created", "trip_id", trip.ID.String(), "status", trip.Status)
 	writeTrip(w, http.StatusCreated, trip, "/api/v1/trips/"+trip.ID.String())
+}
+
+func idempotencyKey(params api.CreateTripParams) *uuid.UUID {
+	if params.IdempotencyKey == nil {
+		return nil
+	}
+	id := uuid.UUID(*params.IdempotencyKey)
+	return &id
 }
 
 func (h *Handler) GetTrip(w http.ResponseWriter, r *http.Request, tripID api.TripId) {
@@ -104,6 +116,9 @@ func (h *Handler) writeServiceError(w http.ResponseWriter, r *http.Request, err 
 	case errors.Is(err, ErrTripCompleted):
 		writeProblem(w, r, http.StatusConflict, "trip_completed", "Trip completed",
 			"https://tripgo.example/problems/trip-completed", "Operation is not allowed for a completed trip")
+	case errors.Is(err, ErrIdempotencyConflict):
+		writeProblem(w, r, http.StatusConflict, "idempotency_conflict", "Idempotency conflict",
+			"https://tripgo.example/problems/idempotency-conflict", "Idempotency-Key was already used with a different request body")
 	case errors.Is(err, ErrTripNotFound):
 		writeProblem(w, r, http.StatusNotFound, "trip_not_found", "Trip not found",
 			"https://tripgo.example/problems/trip-not-found", "Trip was not found")

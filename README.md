@@ -44,6 +44,7 @@ make run
 | `DATABASE_MAX_CONN_LIFETIME` | `30m` | время жизни соединения |
 | `DATABASE_CONNECT_TIMEOUT` | `5s` | таймаут подключения и `/ready` |
 | `DATABASE_QUERY_TIMEOUT` | `3s` | таймаут каждого запроса к базе |
+| `IDEMPOTENCY_TTL` | `24h` | сколько хранить `Idempotency-Key` |
 
 В `.env.example` также лежат имена переменных следующих лабораторных. Сервис их пока не читает, переименовывать нельзя.
 
@@ -57,6 +58,7 @@ make run
 | `make migrate-reset` | откатывает все миграции |
 | `make run` | запускает сервис |
 | `make test` | `go test -race -count=1 ./...` |
+| `make docker-build` | собирает образ `trip-service:lab1` |
 
 Сгенерированный файл коммитится и руками не правится.
 
@@ -80,9 +82,17 @@ make run
 | 404 | `trip_not_found` | поездки нет |
 | 409 | `driver_busy` | у водителя уже есть активная поездка |
 | 409 | `trip_completed` | поездка уже завершена |
+| 409 | `idempotency_conflict` | тот же `Idempotency-Key`, но другое тело |
 | 500 | `internal_error` | всё остальное, подробности только в логе |
 
-Заголовок `Idempotency-Key` в этой работе игнорируется. Это задание со звёздочкой.
+`Idempotency-Key` необязателен. Без него создание работает как раньше и отвечает `201`. Ключ присылает клиент, это UUID. Сервис хранит его `IDEMPOTENCY_TTL` (по умолчанию 24 часа), потом тот же ключ можно использовать для новой поездки.
+
+| Запрос | Ответ |
+|---|---|
+| первый с этим ключом | `201`, поездка создана |
+| повтор с тем же ключом и тем же телом | `200` и та же поездка, вторая не создаётся |
+| тот же ключ и другое тело, пока ключ жив | `409 idempotency_conflict` |
+| ключ не UUID | `400 invalid_request` |
 
 ## Как проверить
 
@@ -164,6 +174,31 @@ seq 20 | xargs -P20 -I{} curl -s -o /dev/null -w '%{http_code}\n' \
   -d @/tmp/trip.json | sort | uniq -c
 ```
 
+Идемпотентность. Повтор отдаёт `200` и тот же `id`. Другая цена с тем же ключом — `409`.
+
+```bash
+KEY=$(cat /proc/sys/kernel/random/uuid)
+DRIVER_ID=$(cat /proc/sys/kernel/random/uuid)
+BODY='{"user_id":"'"$USER_ID"'","driver_id":"'"$DRIVER_ID"'","start_point":{"latitude":59.9398,"longitude":30.3146},"end_point":{"latitude":59.9290,"longitude":30.3626},"price":1450}'
+
+curl -sS -D- -X POST localhost:8080/api/v1/trips \
+  -H 'content-type: application/json' -H "Idempotency-Key: $KEY" -d "$BODY"
+curl -sS -D- -X POST localhost:8080/api/v1/trips \
+  -H 'content-type: application/json' -H "Idempotency-Key: $KEY" -d "$BODY"
+```
+
+Двадцать параллельных запросов с одним новым ключом и одним телом: один `201`, остальные `200`, в базе одна поездка.
+
+```bash
+KEY=$(cat /proc/sys/kernel/random/uuid)
+DRIVER_ID=$(cat /proc/sys/kernel/random/uuid)
+BODY='{"user_id":"'"$USER_ID"'","driver_id":"'"$DRIVER_ID"'","start_point":{"latitude":59.9398,"longitude":30.3146},"end_point":{"latitude":59.9290,"longitude":30.3626},"price":1450}'
+seq 20 | xargs -P20 -I{} curl -s -o /dev/null -w '%{http_code}\n' \
+  -X POST localhost:8080/api/v1/trips \
+  -H 'content-type: application/json' -H "Idempotency-Key: $KEY" \
+  -d "$BODY" | sort | uniq -c
+```
+
 Два одновременных завершения. Один `200`, один `409`, `finished_at` один:
 
 ```bash
@@ -171,7 +206,7 @@ seq 2 | xargs -P2 -I{} curl -s -o /dev/null -w '%{http_code}\n' \
   -X POST localhost:8080/api/v1/trips/$TRIP_ID/finish | sort | uniq -c
 ```
 
-Атомарность создания. В `internal/trip_service.go` в `Create` временно верните ошибку сразу после вставки в `trips` и до вставки в журнал, соберите сервис и создайте поездку. Ответ будет `500`. В таблице `trips` этой строки не будет: транзакция откатилась. Верните код назад.
+Атомарность создания. В `insertTrip` временно верните ошибку сразу после вставки в `trips` и до вставки в журнал, соберите сервис и создайте поездку. Ответ будет `500`. В таблицах `trips` и `idempotency_keys` этой поездки не останется: транзакция откатилась. Верните код назад.
 
 Тесты этой работы не требуются. `make test` гоняет `go test` с `-race` и должен завершаться успешно.
 
@@ -181,6 +216,25 @@ seq 2 | xargs -P2 -I{} curl -s -o /dev/null -w '%{http_code}\n' \
 
 **Завершение.** `UPDATE ... WHERE id = $1 AND status = 'active'`. Между проверкой и записью нет окна в коде. Второй параллельный `finish` ждёт блокировку строки, после коммита первого не находит активную строку и получает `409 trip_completed`. `finished_at` не перезаписывается. Если строк ноль, отдельный `SELECT` отличает «нет поездки» от «уже завершена».
 
-**Менеджер транзакций.** `Do` открывает транзакцию и кладёт её в `context`. Репозиторий берёт из контекста транзакцию, а если её нет — пул. В метод репозитория транзакция не передаётся. `nil` из функции — `COMMIT`, ошибка или паника — `ROLLBACK`, паника пробрасывается дальше. Вложенный `Do` не открывает вторую транзакцию и не делает свой `COMMIT`: это делает только внешний вызов. Создание поездки — один `Do` на `INSERT` в `trips` и `INSERT` в `trip_status_history`.
+**Менеджер транзакций.** `Do` открывает транзакцию и кладёт её в `context`. Репозиторий берёт из контекста транзакцию, а если её нет — пул. В метод репозитория транзакция не передаётся. `nil` из функции — `COMMIT`, ошибка или паника — `ROLLBACK`, паника пробрасывается дальше. Вложенный `Do` не открывает вторую транзакцию и не делает свой `COMMIT`: это делает только внешний вызов. Создание поездки — один `Do`: при наличии ключа сначала `INSERT` в `idempotency_keys`, затем в `trips` и `trip_status_history`. Внешний ключ на поездку отложен до конца транзакции, поэтому ключ можно записать раньше строки поездки. Если журнал не записался, откатываются и поездка, и ключ.
+
+**Идемпотентность.** Тело сравнивается по полям запроса, а не по сырому JSON: другой порядок полей и пробелы не считаются другим телом. Хеш — SHA-256. От гонки защищает первичный ключ `idempotency_keys`: второй параллельный `INSERT` ждёт коммит первого и получает `23505`. Проигравший откатывает свою поездку и читает уже сохранённую. Истёкшая строка удаляется только если у неё тот же `expires_at`, который увидел запрос, и в той же транзакции, где создаётся новая поездка.
 
 **Зачем `/ready` отдельно от `/health`.** `/health` отвечает, пока жив процесс, и не зависит от базы: оркестратор не должен перезапускать контейнер из-за короткого сбоя PostgreSQL. `/ready` проверяет базу и при отказе отдаёт `503`, чтобы в процесс не шли новые запросы.
+
+## Образ
+
+`deploy/Dockerfile` собирает сервис в Alpine, а в итоговый образ кладёт только статический бинарь. База образа — `gcr.io/distroless/static-debian12:nonroot`, процесс запускается как `nonroot`, не как root. Исходников, Go toolchain и `.env` в итоговом образе нет. `.dockerignore` не пускает в контекст сборки `.git`, `.env`, `.tripgo` и тесты.
+
+Размер итогового образа: **21.3 MB** (`docker images trip-service:lab1`).
+
+Рядом с PostgreSQL из `tripgoctl`. `localhost` внутри контейнера — не хост, поэтому в `DATABASE_URL` нужен `host.docker.internal` и порт из `tripgoctl connect`.
+
+```bash
+make docker-build
+export DATABASE_URL='postgres://tripgo:tripgo@host.docker.internal:21032/tripgo?sslmode=disable'
+docker compose -f deploy/compose.yaml up
+curl -sS -D- localhost:8080/ready
+```
+
+Порт `21032` замените на тот, что напечатал `tripgoctl connect`.

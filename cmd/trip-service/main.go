@@ -47,7 +47,8 @@ func run() error {
 
 	trips := app.NewTripRepository(pool, cfg.DatabaseQueryTimeout)
 	history := app.NewTripStatusHistoryRepository(pool, cfg.DatabaseQueryTimeout)
-	service := app.NewTripService(app.NewTxManager(pool, cfg.DatabaseQueryTimeout), trips, history)
+	keys := app.NewIdempotencyRepository(pool, cfg.DatabaseQueryTimeout)
+	service := app.NewTripService(app.NewTxManager(pool, cfg.DatabaseQueryTimeout), trips, history, keys, cfg.IdempotencyTTL)
 	handler := app.NewHandler(service, pool.Ping, cfg.DatabaseConnectTimeout)
 
 	router := chi.NewRouter()

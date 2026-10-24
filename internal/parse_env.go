@@ -25,6 +25,7 @@ type Config struct {
 	DatabaseMaxConnLifetime time.Duration
 	DatabaseConnectTimeout  time.Duration
 	DatabaseQueryTimeout    time.Duration
+	IdempotencyTTL          time.Duration
 }
 
 // ParseEnv читает конфигурацию из окружения. Пустая обязательная переменная
@@ -73,6 +74,9 @@ func ParseEnv() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.DatabaseQueryTimeout, err = duration("DATABASE_QUERY_TIMEOUT"); err != nil {
+		return Config{}, err
+	}
+	if cfg.IdempotencyTTL, err = duration("IDEMPOTENCY_TTL"); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil

@@ -1,4 +1,4 @@
-.PHONY: generate migrate migrate-down migrate-reset run test
+.PHONY: generate migrate migrate-down migrate-reset run test docker-build
 
 # Подхватываем безопасные значения, затем локальный .env от tripgoctl.
 ENV_LOAD = set -a; [ -f .env.example ] && . ./.env.example; [ -f .env ] && . ./.env; set +a;
@@ -25,3 +25,6 @@ run:
 
 test:
 	go test -race -count=1 ./...
+
+docker-build:
+	docker build -f deploy/Dockerfile -t trip-service:lab1 .
