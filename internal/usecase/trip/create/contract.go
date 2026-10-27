@@ -37,4 +37,8 @@ type (
 	idGenerator interface {
 		New() uuid.UUID
 	}
+
+	metrics interface {
+		TripCreated(ctx context.Context)
+	}
 )

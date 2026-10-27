@@ -27,4 +27,8 @@ type (
 	clock interface {
 		Now() time.Time
 	}
+
+	metrics interface {
+		TripCompleted(ctx context.Context)
+	}
 )

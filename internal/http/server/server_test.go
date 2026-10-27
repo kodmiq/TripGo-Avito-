@@ -17,6 +17,8 @@ import (
 	httpfinish "github.com/kodmiq/TripGo-Avito-/internal/http/trip/finish"
 	httpget "github.com/kodmiq/TripGo-Avito-/internal/http/trip/get"
 	"github.com/kodmiq/TripGo-Avito-/internal/model"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 type unusedCreate struct{}
@@ -43,14 +45,20 @@ func (unusedDB) Ping(context.Context) error { return nil }
 
 func TestInvalidTripID(t *testing.T) {
 	log := slog.New(slog.DiscardHandler)
-	handler := server.New(
+	meter := sdkmetric.NewMeterProvider().Meter("test")
+	handler, err := server.New(
 		httpcreate.New(unusedCreate{}, log),
 		httpget.New(unusedGet{}, log),
 		httpfinish.New(unusedFinish{}, log),
 		health.New(),
 		ready.New(unusedDB{}, time.Second, log),
 		log,
+		sdktrace.NewTracerProvider(),
+		meter,
 	)
+	if err != nil {
+		t.Fatalf("server: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/trips/not-a-uuid", nil)
 	rec := httptest.NewRecorder()

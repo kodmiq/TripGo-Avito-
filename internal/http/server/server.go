@@ -14,6 +14,8 @@ import (
 	httpcreate "github.com/kodmiq/TripGo-Avito-/internal/http/trip/create"
 	httpfinish "github.com/kodmiq/TripGo-Avito-/internal/http/trip/finish"
 	httpget "github.com/kodmiq/TripGo-Avito-/internal/http/trip/get"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Server собирает ручки в один ServerInterface для oapi-codegen.
@@ -32,9 +34,18 @@ func New(
 	healthHandler *health.Handler,
 	readyHandler *ready.Handler,
 	log *slog.Logger,
-) http.Handler {
+	tracer trace.TracerProvider,
+	meter metric.Meter,
+) (http.Handler, error) {
+	metrics, err := middleware.Metrics(meter)
+	if err != nil {
+		return nil, err
+	}
 	router := chi.NewRouter()
 	router.Use(middleware.Recover(log))
+	router.Use(middleware.Tracing(tracer))
+	router.Use(middleware.Logging(log))
+	router.Use(metrics)
 	api.HandlerWithOptions(Server{
 		create: create,
 		get:    get,
@@ -48,7 +59,7 @@ func New(
 			respond.Problem(w, r, status, body)
 		},
 	})
-	return router
+	return router, nil
 }
 
 func (s Server) CreateTrip(w http.ResponseWriter, r *http.Request, params api.CreateTripParams) {

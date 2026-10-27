@@ -19,10 +19,11 @@ type Usecase struct {
 	history historyRepository
 	clock   clock
 	log     *slog.Logger
+	metrics metrics
 }
 
-func New(tx txManager, trips tripRepository, history historyRepository, clock clock, log *slog.Logger) *Usecase {
-	return &Usecase{tx: tx, trips: trips, history: history, clock: clock, log: log}
+func New(tx txManager, trips tripRepository, history historyRepository, clock clock, log *slog.Logger, metrics metrics) *Usecase {
+	return &Usecase{tx: tx, trips: trips, history: history, clock: clock, log: log, metrics: metrics}
 }
 
 // Finish атомарно переводит active → completed.
@@ -79,6 +80,7 @@ func (u *Usecase) Finish(ctx context.Context, id uuid.UUID) (model.Trip, error) 
 	if err != nil {
 		return model.Trip{}, err
 	}
+	u.metrics.TripCompleted(ctx)
 	u.log.InfoContext(ctx, "trip completed", "trip_id", finished.ID.String(), "status", finished.Status)
 	return finished, nil
 }

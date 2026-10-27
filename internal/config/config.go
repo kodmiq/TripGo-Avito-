@@ -28,6 +28,12 @@ type Config struct {
 	DatabaseConnectTimeout  time.Duration
 	DatabaseQueryTimeout    time.Duration
 	IdempotencyTTL          time.Duration
+
+	OTELServiceName        string
+	OTELEndpoint           string
+	OTELProtocol           string
+	OTELResourceAttributes string
+	OTELTracesSampler      string
 }
 
 // LoadDotEnv читает .env.example, затем перекрывает его файлом .env от tripgoctl.
@@ -94,6 +100,21 @@ func Parse() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.IdempotencyTTL, err = duration("IDEMPOTENCY_TTL"); err != nil {
+		return Config{}, err
+	}
+	if cfg.OTELServiceName, err = required("OTEL_SERVICE_NAME"); err != nil {
+		return Config{}, err
+	}
+	if cfg.OTELEndpoint, err = required("OTEL_EXPORTER_OTLP_ENDPOINT"); err != nil {
+		return Config{}, err
+	}
+	if cfg.OTELProtocol, err = required("OTEL_EXPORTER_OTLP_PROTOCOL"); err != nil {
+		return Config{}, err
+	}
+	if cfg.OTELResourceAttributes, err = required("OTEL_RESOURCE_ATTRIBUTES"); err != nil {
+		return Config{}, err
+	}
+	if cfg.OTELTracesSampler, err = required("OTEL_TRACES_SAMPLER"); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil

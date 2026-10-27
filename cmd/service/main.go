@@ -35,7 +35,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer app.Close()
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+		defer cancel()
+		app.Close(ctx)
+	}()
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -60,8 +64,10 @@ func run() error {
 	defer cancel()
 	if err := app.Server.Shutdown(shutdownCtx); err != nil {
 		app.Logger.Error("shutdown budget exceeded", "timeout", cfg.ShutdownTimeout.String(), "err", err)
+		app.Close(shutdownCtx)
 		return fmt.Errorf("shutdown budget of %s exceeded: %w", cfg.ShutdownTimeout, err)
 	}
+	app.Close(shutdownCtx)
 	app.Logger.Info("shutdown complete")
 	return nil
 }

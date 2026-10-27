@@ -26,6 +26,7 @@ type Usecase struct {
 	clock   clock
 	ids     idGenerator
 	log     *slog.Logger
+	metrics metrics
 }
 
 func New(
@@ -37,10 +38,11 @@ func New(
 	clock clock,
 	ids idGenerator,
 	log *slog.Logger,
+	metrics metrics,
 ) *Usecase {
 	return &Usecase{
 		tx: tx, trips: trips, history: history, keys: keys,
-		ttl: ttl, clock: clock, ids: ids, log: log,
+		ttl: ttl, clock: clock, ids: ids, log: log, metrics: metrics,
 	}
 }
 
@@ -189,6 +191,7 @@ func (u *Usecase) insertTrip(ctx context.Context, in model.CreateTrip, key *uuid
 	if err != nil {
 		return model.Trip{}, err
 	}
+	u.metrics.TripCreated(ctx)
 	u.log.InfoContext(ctx, "trip created", "trip_id", stored.ID.String(), "status", stored.Status)
 	return stored, nil
 }

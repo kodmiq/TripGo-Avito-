@@ -22,6 +22,10 @@ type stubIDs struct{ id uuid.UUID }
 
 func (s stubIDs) New() uuid.UUID { return s.id }
 
+type noopMetrics struct{}
+
+func (noopMetrics) TripCreated(context.Context) {}
+
 func runTx(ctx context.Context, fn func(context.Context) error) error {
 	return fn(ctx)
 }
@@ -47,7 +51,7 @@ func newHarness(t *testing.T) *harness {
 		now:     time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC),
 		id:      uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 	}
-	h.uc = create.New(h.tx, h.trips, h.history, h.keys, 24*time.Hour, stubClock{now: h.now}, stubIDs{id: h.id}, slog.New(slog.DiscardHandler))
+	h.uc = create.New(h.tx, h.trips, h.history, h.keys, 24*time.Hour, stubClock{now: h.now}, stubIDs{id: h.id}, slog.New(slog.DiscardHandler), noopMetrics{})
 	return h
 }
 

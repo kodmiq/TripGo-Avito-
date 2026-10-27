@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,13 +30,15 @@ import (
 type App struct {
 	Server *http.Server
 	Logger *slog.Logger
-	close  func()
+	once   sync.Once
+	close  func(context.Context)
 }
 
-func (a *App) Close() {
-	if a.close != nil {
-		a.close()
+func (a *App) Close(ctx context.Context) {
+	if a.close == nil {
+		return
 	}
+	a.once.Do(func() { a.close(ctx) })
 }
 
 type systemClock struct{}
@@ -50,9 +53,12 @@ func (systemIDs) New() uuid.UUID {
 	return uuid.New()
 }
 
-// New создаёт конкретные реализации и связывает их. Пул и репозитории рождаются только здесь.
+// New создаёт конкретные реализации и связывает их. Пул, телеметрия и репозитории рождаются только здесь.
 func New(ctx context.Context, cfg config.Config) (*App, error) {
-	log := telemetry.NewLogger(cfg.LogLevel)
+	tel, err := telemetry.Setup(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
 
 	pool, err := postgres.NewPool(ctx, postgres.PoolConfig{
 		URL:             cfg.DatabaseURL,
@@ -60,34 +66,52 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		MinConns:        cfg.DatabaseMinConns,
 		MaxConnLifetime: cfg.DatabaseMaxConnLifetime,
 		ConnectTimeout:  cfg.DatabaseConnectTimeout,
+		Tracer:          tel.DB,
 	})
 	if err != nil {
+		_ = tel.Shutdown(ctx)
 		return nil, err
 	}
 
-	app := wire(cfg, log, pool)
+	app, err := wire(cfg, tel, pool)
+	if err != nil {
+		pool.Close()
+		_ = tel.Shutdown(ctx)
+		return nil, err
+	}
 	return app, nil
 }
 
-func wire(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) *App {
+func wire(cfg config.Config, tel telemetry.Providers, pool *pgxpool.Pool) (*App, error) {
+	log := tel.Logger
 	trips := trip.New(pool, cfg.DatabaseQueryTimeout)
 	history := trip.NewHistory(pool, cfg.DatabaseQueryTimeout)
 	keys := idempotency.New(pool, cfg.DatabaseQueryTimeout)
 	tx := transaction.New(pool, cfg.DatabaseQueryTimeout, log)
 	clock := systemClock{}
+	meter := tel.Meter.Meter("trip-service")
 
-	createTrip := createuc.New(tx, trips, history, keys, cfg.IdempotencyTTL, clock, systemIDs{}, log)
+	if err := telemetry.WatchActiveTrips(meter, log, trips.CountActive); err != nil {
+		return nil, err
+	}
+
+	createTrip := createuc.New(tx, trips, history, keys, cfg.IdempotencyTTL, clock, systemIDs{}, log, tel.Trips)
 	getTrip := getuc.New(trips)
-	finishTrip := finishuc.New(tx, trips, history, clock, log)
+	finishTrip := finishuc.New(tx, trips, history, clock, log, tel.Trips)
 
-	handler := server.New(
+	handler, err := server.New(
 		httpcreate.New(createTrip, log),
 		httpget.New(getTrip, log),
 		httpfinish.New(finishTrip, log),
 		health.New(),
 		ready.New(pool, cfg.DatabaseConnectTimeout, log),
 		log,
+		tel.Tracer,
+		meter,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	return &App{
 		Logger: log,
@@ -99,6 +123,11 @@ func wire(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) *App {
 			WriteTimeout:      cfg.HTTPWriteTimeout,
 			IdleTimeout:       cfg.HTTPIdleTimeout,
 		},
-		close: pool.Close,
-	}
+		close: func(ctx context.Context) {
+			if err := tel.Shutdown(ctx); err != nil {
+				log.ErrorContext(ctx, "telemetry shutdown", "err", err)
+			}
+			pool.Close()
+		},
+	}, nil
 }
