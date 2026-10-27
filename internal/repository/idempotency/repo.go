@@ -1,4 +1,4 @@
-package app
+package idempotency
 
 import (
 	"context"
@@ -11,31 +11,28 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	domain "github.com/kodmiq/TripGo-Avito-/internal/domain/trip"
+	"github.com/kodmiq/TripGo-Avito-/internal/infra/postgres"
+	"github.com/kodmiq/TripGo-Avito-/internal/infra/postgres/transaction"
+	"github.com/kodmiq/TripGo-Avito-/internal/model"
 )
 
 const idempotencyKeyConstraint = "idempotency_keys_pkey"
 
-var ErrIdempotencyKeyExists = errors.New("idempotency key exists")
+var sb = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
-type IdempotencyRecord struct {
-	Key         uuid.UUID
-	RequestHash string
-	TripID      uuid.UUID
-	CreatedAt   time.Time
-	ExpiresAt   time.Time
-}
-
-type IdempotencyRepository struct {
+// Repository хранит ключи идемпотентности создания поездки.
+type Repository struct {
 	pool         *pgxpool.Pool
 	queryTimeout time.Duration
 }
 
-func NewIdempotencyRepository(pool *pgxpool.Pool, queryTimeout time.Duration) *IdempotencyRepository {
-	return &IdempotencyRepository{pool: pool, queryTimeout: queryTimeout}
+func New(pool *pgxpool.Pool, queryTimeout time.Duration) *Repository {
+	return &Repository{pool: pool, queryTimeout: queryTimeout}
 }
 
-func (r *IdempotencyRepository) Insert(ctx context.Context, rec IdempotencyRecord) error {
-	ctx, cancel := withTimeout(ctx, r.queryTimeout)
+func (r *Repository) Insert(ctx context.Context, rec model.IdempotencyRecord) error {
+	ctx, cancel := postgres.WithTimeout(ctx, r.queryTimeout)
 	defer cancel()
 
 	query, args, err := sb.Insert("idempotency_keys").
@@ -45,17 +42,17 @@ func (r *IdempotencyRepository) Insert(ctx context.Context, rec IdempotencyRecor
 	if err != nil {
 		return fmt.Errorf("build insert idempotency key: %w", err)
 	}
-	if _, err := executor(ctx, r.pool).Exec(ctx, query, args...); err != nil {
+	if _, err := transaction.Executor(ctx, r.pool).Exec(ctx, query, args...); err != nil {
 		if isIdempotencyKeyConflict(err) {
-			return ErrIdempotencyKeyExists
+			return domain.ErrIdempotencyKeyExists
 		}
 		return fmt.Errorf("insert idempotency key: %w", err)
 	}
 	return nil
 }
 
-func (r *IdempotencyRepository) Get(ctx context.Context, key uuid.UUID) (IdempotencyRecord, error) {
-	ctx, cancel := withTimeout(ctx, r.queryTimeout)
+func (r *Repository) Get(ctx context.Context, key uuid.UUID) (model.IdempotencyRecord, error) {
+	ctx, cancel := postgres.WithTimeout(ctx, r.queryTimeout)
 	defer cancel()
 
 	query, args, err := sb.Select("idempotency_key", "request_hash", "trip_id", "created_at", "expires_at").
@@ -63,11 +60,11 @@ func (r *IdempotencyRepository) Get(ctx context.Context, key uuid.UUID) (Idempot
 		Where(squirrel.Eq{"idempotency_key": key}).
 		ToSql()
 	if err != nil {
-		return IdempotencyRecord{}, fmt.Errorf("build select idempotency key: %w", err)
+		return model.IdempotencyRecord{}, fmt.Errorf("build select idempotency key: %w", err)
 	}
 
-	var rec IdempotencyRecord
-	err = executor(ctx, r.pool).QueryRow(ctx, query, args...).Scan(
+	var rec model.IdempotencyRecord
+	err = transaction.Executor(ctx, r.pool).QueryRow(ctx, query, args...).Scan(
 		&rec.Key,
 		&rec.RequestHash,
 		&rec.TripID,
@@ -75,10 +72,10 @@ func (r *IdempotencyRepository) Get(ctx context.Context, key uuid.UUID) (Idempot
 		&rec.ExpiresAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return IdempotencyRecord{}, ErrIdempotencyKeyNotFound
+		return model.IdempotencyRecord{}, domain.ErrIdempotencyKeyNotFound
 	}
 	if err != nil {
-		return IdempotencyRecord{}, fmt.Errorf("select idempotency key: %w", err)
+		return model.IdempotencyRecord{}, fmt.Errorf("select idempotency key: %w", err)
 	}
 	rec.CreatedAt = rec.CreatedAt.UTC()
 	rec.ExpiresAt = rec.ExpiresAt.UTC()
@@ -87,8 +84,8 @@ func (r *IdempotencyRepository) Get(ctx context.Context, key uuid.UUID) (Idempot
 
 // DeleteExact удаляет строку только с тем сроком, который увидел вызывающий.
 // Чужую, уже обновлённую запись это не затрёт.
-func (r *IdempotencyRepository) DeleteExact(ctx context.Context, key uuid.UUID, expiresAt time.Time) (bool, error) {
-	ctx, cancel := withTimeout(ctx, r.queryTimeout)
+func (r *Repository) DeleteExact(ctx context.Context, key uuid.UUID, expiresAt time.Time) (bool, error) {
+	ctx, cancel := postgres.WithTimeout(ctx, r.queryTimeout)
 	defer cancel()
 
 	query, args, err := sb.Delete("idempotency_keys").
@@ -97,7 +94,7 @@ func (r *IdempotencyRepository) DeleteExact(ctx context.Context, key uuid.UUID, 
 	if err != nil {
 		return false, fmt.Errorf("build delete idempotency key: %w", err)
 	}
-	tag, err := executor(ctx, r.pool).Exec(ctx, query, args...)
+	tag, err := transaction.Executor(ctx, r.pool).Exec(ctx, query, args...)
 	if err != nil {
 		return false, fmt.Errorf("delete idempotency key: %w", err)
 	}

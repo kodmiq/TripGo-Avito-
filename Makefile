@@ -21,7 +21,7 @@ migrate-reset:
 	$(ENV_LOAD) go tool goose -dir migrations postgres "$$DATABASE_URL" down-to 0
 
 run:
-	go run ./cmd/trip-service
+	go run ./cmd/service
 
 test:
 	go test -race -count=1 ./...

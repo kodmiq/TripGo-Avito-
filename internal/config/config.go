@@ -1,4 +1,4 @@
-package app
+package config
 
 import (
 	"fmt"
@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 // Config — параметры процесса. Имена переменных зафиксированы курсом.
@@ -28,9 +30,24 @@ type Config struct {
 	IdempotencyTTL          time.Duration
 }
 
-// ParseEnv читает конфигурацию из окружения. Пустая обязательная переменная
+// LoadDotEnv читает .env.example, затем перекрывает его файлом .env от tripgoctl.
+func LoadDotEnv() error {
+	if _, err := os.Stat(".env.example"); err == nil {
+		if err := godotenv.Load(".env.example"); err != nil {
+			return err
+		}
+	}
+	if _, err := os.Stat(".env"); err == nil {
+		if err := godotenv.Overload(".env"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Parse читает конфигурацию из окружения. Пустая обязательная переменная
 // и нулевой таймаут — ошибка старта, а не молчаливое значение по умолчанию.
-func ParseEnv() (Config, error) {
+func Parse() (Config, error) {
 	var cfg Config
 	var err error
 
