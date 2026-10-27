@@ -1,4 +1,4 @@
-.PHONY: generate migrate migrate-down migrate-reset run test docker-build
+.PHONY: generate migrate migrate-down migrate-reset run test test-integration lint docker-build
 
 # Подхватываем безопасные значения, затем локальный .env от tripgoctl.
 ENV_LOAD = set -a; [ -f .env.example ] && . ./.env.example; [ -f .env ] && . ./.env; set +a;
@@ -24,6 +24,9 @@ test:
 
 test-integration:
 	go test -race -count=1 -tags=integration ./internal/repository/...
+
+lint:
+	golangci-lint run ./...
 
 docker-build:
 	docker build -f deploy/Dockerfile -t trip-service:lab1 .

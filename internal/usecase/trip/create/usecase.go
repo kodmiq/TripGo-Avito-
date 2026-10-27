@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	domain "github.com/kodmiq/TripGo-Avito-/internal/domain/trip"
 	"github.com/kodmiq/TripGo-Avito-/internal/model"
 )

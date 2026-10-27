@@ -7,7 +7,6 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"github.com/kodmiq/TripGo-Avito-/internal/config"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
@@ -17,6 +16,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+
+	"github.com/kodmiq/TripGo-Avito-/internal/config"
 )
 
 // Providers — логгер, трейсы и метрики процесса. Экспорт идёт по OTLP;
@@ -116,8 +117,9 @@ func serviceResource(cfg config.Config) (*resource.Resource, error) {
 }
 
 func resourceAttributes(raw string) ([]attribute.KeyValue, error) {
-	var attrs []attribute.KeyValue
-	for _, part := range strings.Split(raw, ",") {
+	parts := strings.Split(raw, ",")
+	attrs := make([]attribute.KeyValue, 0, len(parts))
+	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue

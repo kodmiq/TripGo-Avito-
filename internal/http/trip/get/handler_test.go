@@ -8,11 +8,11 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"go.uber.org/mock/gomock"
+
 	domain "github.com/kodmiq/TripGo-Avito-/internal/domain/trip"
-	"github.com/kodmiq/TripGo-Avito-/internal/generated"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/trip/get"
 	"github.com/kodmiq/TripGo-Avito-/internal/model"
-	"go.uber.org/mock/gomock"
 )
 
 func TestGetTripNotFound(t *testing.T) {
@@ -23,7 +23,7 @@ func TestGetTripNotFound(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/trips/"+id.String(), nil)
 	rec := httptest.NewRecorder()
-	get.New(uc, slog.New(slog.DiscardHandler)).GetTrip(rec, req, api.TripId(id))
+	get.New(uc, slog.New(slog.DiscardHandler)).GetTrip(rec, req, id)
 
 	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), `"code":"trip_not_found"`) {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
@@ -38,7 +38,7 @@ func TestGetTripSuccess(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/trips/"+id.String(), nil)
 	rec := httptest.NewRecorder()
-	get.New(uc, slog.New(slog.DiscardHandler)).GetTrip(rec, req, api.TripId(id))
+	get.New(uc, slog.New(slog.DiscardHandler)).GetTrip(rec, req, id)
 
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), id.String()) {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())

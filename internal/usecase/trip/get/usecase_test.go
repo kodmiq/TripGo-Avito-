@@ -6,10 +6,11 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"go.uber.org/mock/gomock"
+
 	domain "github.com/kodmiq/TripGo-Avito-/internal/domain/trip"
 	"github.com/kodmiq/TripGo-Avito-/internal/model"
 	"github.com/kodmiq/TripGo-Avito-/internal/usecase/trip/get"
-	"go.uber.org/mock/gomock"
 )
 
 func TestGet(t *testing.T) {

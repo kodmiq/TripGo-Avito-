@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/kodmiq/TripGo-Avito-/internal/generated"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/domainerror"
 	"github.com/kodmiq/TripGo-Avito-/internal/model"

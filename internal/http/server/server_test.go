@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+
 	"github.com/kodmiq/TripGo-Avito-/internal/http/health"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/ready"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/server"
@@ -17,8 +20,6 @@ import (
 	httpfinish "github.com/kodmiq/TripGo-Avito-/internal/http/trip/finish"
 	httpget "github.com/kodmiq/TripGo-Avito-/internal/http/trip/get"
 	"github.com/kodmiq/TripGo-Avito-/internal/model"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 type unusedCreate struct{}

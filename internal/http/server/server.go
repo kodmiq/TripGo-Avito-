@@ -5,6 +5,9 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/kodmiq/TripGo-Avito-/internal/generated"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/domainerror"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/health"
@@ -14,8 +17,6 @@ import (
 	httpcreate "github.com/kodmiq/TripGo-Avito-/internal/http/trip/create"
 	httpfinish "github.com/kodmiq/TripGo-Avito-/internal/http/trip/finish"
 	httpget "github.com/kodmiq/TripGo-Avito-/internal/http/trip/get"
-	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // Server собирает ручки в один ServerInterface для oapi-codegen.

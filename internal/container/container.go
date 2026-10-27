@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/kodmiq/TripGo-Avito-/internal/config"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/health"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/ready"

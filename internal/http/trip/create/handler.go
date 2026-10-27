@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+
 	"github.com/kodmiq/TripGo-Avito-/internal/generated"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/respond"
 )
@@ -42,6 +43,6 @@ func idempotencyKey(params api.CreateTripParams) *uuid.UUID {
 	if params.IdempotencyKey == nil {
 		return nil
 	}
-	id := uuid.UUID(*params.IdempotencyKey)
+	id := *params.IdempotencyKey
 	return &id
 }

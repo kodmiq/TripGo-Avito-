@@ -17,13 +17,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
+
 	domain "github.com/kodmiq/TripGo-Avito-/internal/domain/trip"
 	"github.com/kodmiq/TripGo-Avito-/internal/infra/postgres/transaction"
 	"github.com/kodmiq/TripGo-Avito-/internal/model"
 	"github.com/kodmiq/TripGo-Avito-/internal/repository/idempotency"
 	triprepo "github.com/kodmiq/TripGo-Avito-/internal/repository/trip"
-	"github.com/pressly/goose/v3"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
 const queryTimeout = 5 * time.Second

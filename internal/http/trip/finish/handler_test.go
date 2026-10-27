@@ -10,11 +10,11 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"go.uber.org/mock/gomock"
+
 	domain "github.com/kodmiq/TripGo-Avito-/internal/domain/trip"
-	"github.com/kodmiq/TripGo-Avito-/internal/generated"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/trip/finish"
 	"github.com/kodmiq/TripGo-Avito-/internal/model"
-	"go.uber.org/mock/gomock"
 )
 
 func TestFinishTripSuccess(t *testing.T) {
@@ -70,6 +70,6 @@ func callFinish(t *testing.T, h *finish.Handler, id uuid.UUID, body string) *htt
 	}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/trips/"+id.String()+"/finish", bodyReader)
 	rec := httptest.NewRecorder()
-	h.FinishTrip(rec, req, api.TripId(id))
+	h.FinishTrip(rec, req, id)
 	return rec
 }

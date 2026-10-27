@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/kodmiq/TripGo-Avito-/internal/infra/postgres/transaction"
 )
 

@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/mock/gomock"
+
 	domain "github.com/kodmiq/TripGo-Avito-/internal/domain/trip"
 	"github.com/kodmiq/TripGo-Avito-/internal/model"
 	"github.com/kodmiq/TripGo-Avito-/internal/usecase/trip/create"
-	"go.uber.org/mock/gomock"
 )
 
 type stubClock struct{ now time.Time }

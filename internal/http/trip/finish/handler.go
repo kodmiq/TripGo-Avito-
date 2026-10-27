@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/google/uuid"
 	"github.com/kodmiq/TripGo-Avito-/internal/generated"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/respond"
 )
@@ -24,7 +23,7 @@ func (h *Handler) FinishTrip(w http.ResponseWriter, r *http.Request, tripID api.
 		respond.WriteError(w, r, h.log, err)
 		return
 	}
-	trip, err := h.finish.Finish(r.Context(), uuid.UUID(tripID))
+	trip, err := h.finish.Finish(r.Context(), tripID)
 	if err != nil {
 		respond.WriteError(w, r, h.log, err)
 		return

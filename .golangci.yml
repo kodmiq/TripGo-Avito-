@@ -101,6 +101,7 @@ linters:
       # сгенерированный по OpenAPI и protobuf код не линтуем
       - api/
       - gen/
+      - internal/generated
 
 formatters:
   enable:
@@ -122,3 +123,4 @@ formatters:
       - third_party$
       - builtin$
       - examples$
+      - internal/generated

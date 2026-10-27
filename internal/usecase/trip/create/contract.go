@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/kodmiq/TripGo-Avito-/internal/model"
 )
 

@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kodmiq/TripGo-Avito-/internal/http/ready"
 	"go.uber.org/mock/gomock"
+
+	"github.com/kodmiq/TripGo-Avito-/internal/http/ready"
 )
 
 func TestReadyUnavailable(t *testing.T) {

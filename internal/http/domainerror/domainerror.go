@@ -58,7 +58,7 @@ func problem(status int, code, title, typeURL, detail string) (int, api.Problem)
 	return status, api.Problem{
 		Type:   typeURL,
 		Title:  title,
-		Status: int32(status),
+		Status: int32(status), //nolint:gosec // G115: код HTTP-ответа помещается в int32
 		Detail: &detail,
 		Code:   code,
 	}

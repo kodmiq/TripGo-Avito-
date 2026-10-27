@@ -11,11 +11,12 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"go.uber.org/mock/gomock"
+
 	domain "github.com/kodmiq/TripGo-Avito-/internal/domain/trip"
 	"github.com/kodmiq/TripGo-Avito-/internal/generated"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/trip/create"
 	"github.com/kodmiq/TripGo-Avito-/internal/model"
-	"go.uber.org/mock/gomock"
 )
 
 const validBody = `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":59.9398,"longitude":30.3146},"end_point":{"latitude":59.9290,"longitude":30.3626},"price":1450}`
@@ -46,7 +47,7 @@ func TestCreateTripReplay(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	uc := NewMockcreator(ctrl)
 	key := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
-	apiKey := api.IdempotencyKey(key)
+	apiKey := key
 	uc.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, _ model.CreateTrip, got *uuid.UUID) (model.Trip, bool, error) {
 			if got == nil || *got != key {

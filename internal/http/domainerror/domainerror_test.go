@@ -74,7 +74,7 @@ func TestProblem(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			status, body := Problem(tt.err)
-			if status != tt.wantStatus || body.Status != int32(tt.wantStatus) {
+			if status != tt.wantStatus || body.Status != int32(tt.wantStatus) { //nolint:gosec // G115: код HTTP-ответа помещается в int32
 				t.Fatalf("status = %d, body status = %d, want %d", status, body.Status, tt.wantStatus)
 			}
 			if body.Code != tt.wantCode {
