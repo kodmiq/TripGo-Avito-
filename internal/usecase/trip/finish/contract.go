@@ -8,7 +8,7 @@ import (
 	"github.com/kodmiq/TripGo-Avito-/internal/model"
 )
 
-//go:generate mockgen -source=contract.go -destination=mocks_test.go -package=finish_test
+//go:generate go tool mockgen -source=contract.go -destination=mocks_test.go -package=finish_test
 
 type (
 	tripRepository interface {

@@ -4,12 +4,7 @@
 ENV_LOAD = set -a; [ -f .env.example ] && . ./.env.example; [ -f .env ] && . ./.env; set +a;
 
 generate:
-	go tool oapi-codegen \
-		-generate types,chi-server \
-		-package api \
-		-include-operation-ids createTrip,getTrip,finishTrip,health,ready \
-		-o internal/generated/api.gen.go \
-		contracts/openapi/trip-service.openapi.yaml
+	go generate ./...
 
 migrate:
 	$(ENV_LOAD) go tool goose -dir migrations postgres "$$DATABASE_URL" up
@@ -24,7 +19,8 @@ run:
 	go run ./cmd/service
 
 test:
-	go test -race -count=1 ./...
+	go test -race -count=1 -coverprofile=coverage.out -coverpkg=./internal/domain/...,./internal/usecase/... ./...
+	go tool cover -func=coverage.out
 
 docker-build:
 	docker build -f deploy/Dockerfile -t trip-service:lab1 .
