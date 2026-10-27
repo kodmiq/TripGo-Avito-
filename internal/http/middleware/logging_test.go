@@ -11,6 +11,24 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+func TestRoutePatternIsKnownBeforeHandler(t *testing.T) {
+	router := chi.NewRouter()
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if got := routePattern(r); got != "/api/v1/trips/{tripId}" {
+				t.Errorf("route before handler = %q", got)
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
+	router.Get("/api/v1/trips/{tripId}", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/trips/6cb72c04-7650-45c9-a79b-bcdba0631e0c", nil)
+	router.ServeHTTP(httptest.NewRecorder(), req)
+}
+
 func TestLoggingUsesRouteTemplate(t *testing.T) {
 	var buf bytes.Buffer
 	log := slog.New(slog.NewJSONHandler(&buf, nil))

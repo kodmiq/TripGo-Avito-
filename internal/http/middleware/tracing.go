@@ -49,7 +49,20 @@ func routePattern(r *http.Request) string {
 	if route == nil {
 		return "unknown"
 	}
+	// RoutePattern заполняется по мере прохода по дереву chi и до вызова
+	// next ещё пустой. Повторный поиск по тому же дереву даёт шаблон сразу,
+	// чтобы +1 и -1 у active_requests шли с одним и тем же http.route.
 	if pattern := route.RoutePattern(); pattern != "" {
+		return pattern
+	}
+	if route.Routes == nil {
+		return "unknown"
+	}
+	matched := chi.NewRouteContext()
+	if !route.Routes.Match(matched, r.Method, r.URL.Path) {
+		return "unknown"
+	}
+	if pattern := matched.RoutePattern(); pattern != "" {
 		return pattern
 	}
 	return "unknown"
