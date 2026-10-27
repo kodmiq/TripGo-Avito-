@@ -22,5 +22,8 @@ test:
 	go test -race -count=1 -coverprofile=coverage.out -coverpkg=./internal/domain/...,./internal/usecase/... ./...
 	go tool cover -func=coverage.out
 
+test-integration:
+	go test -race -count=1 -tags=integration ./internal/repository/...
+
 docker-build:
 	docker build -f deploy/Dockerfile -t trip-service:lab1 .
