@@ -23,14 +23,14 @@ func TestProblem(t *testing.T) {
 			name:       "validation",
 			err:        &domain.ValidationError{Detail: "price is required"},
 			wantStatus: http.StatusBadRequest,
-			wantCode:   "invalid_request",
+			wantCode:   codeInvalidRequest,
 			wantDetail: "price is required",
 		},
 		{
 			name:       "wrapped validation",
 			err:        fmt.Errorf("decode: %w", &domain.ValidationError{Detail: "user_id is required"}),
 			wantStatus: http.StatusBadRequest,
-			wantCode:   "invalid_request",
+			wantCode:   codeInvalidRequest,
 			wantDetail: "user_id is required",
 		},
 		{
@@ -92,7 +92,7 @@ func TestProblem(t *testing.T) {
 
 func TestInvalidRequest(t *testing.T) {
 	status, body := InvalidRequest("Request validation failed")
-	if status != http.StatusBadRequest || body.Code != "invalid_request" || body.Detail == nil || *body.Detail != "Request validation failed" {
+	if status != http.StatusBadRequest || body.Code != codeInvalidRequest || body.Detail == nil || *body.Detail != "Request validation failed" {
 		t.Fatalf("InvalidRequest() = %d %+v", status, body)
 	}
 }

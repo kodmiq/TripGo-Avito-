@@ -71,7 +71,7 @@ func validInput() model.CreateTrip {
 func TestCreateSuccess(t *testing.T) {
 	h := newHarness(t)
 	in := validInput()
-	saved := model.Trip{ID: h.id, UserID: in.UserID, DriverID: in.DriverID, Price: in.Price, Status: "active", StartedAt: h.now}
+	saved := model.Trip{ID: h.id, UserID: in.UserID, DriverID: in.DriverID, Price: in.Price, Status: string(domain.StatusActive), StartedAt: h.now}
 
 	h.tx.EXPECT().Do(gomock.Any(), gomock.Any()).DoAndReturn(runTx)
 	h.trips.EXPECT().Save(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, trip model.Trip) (model.Trip, error) {
@@ -91,7 +91,7 @@ func TestCreateSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create() = %v", err)
 	}
-	if !created || got.ID != h.id || got.Status != "active" {
+	if !created || got.ID != h.id || got.Status != string(domain.StatusActive) {
 		t.Fatalf("Create() = %+v, created %v", got, created)
 	}
 }
@@ -136,7 +136,7 @@ func TestCreateReplaySameBody(t *testing.T) {
 	in := validInput()
 	key := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 	var storedHash string
-	saved := model.Trip{ID: h.id, Status: "active", StartedAt: h.now}
+	saved := model.Trip{ID: h.id, Status: string(domain.StatusActive), StartedAt: h.now}
 
 	gomock.InOrder(
 		h.keys.EXPECT().Get(gomock.Any(), key).Return(model.IdempotencyRecord{}, domain.ErrIdempotencyKeyNotFound),
@@ -187,7 +187,7 @@ func TestCreateReplacesExpiredKey(t *testing.T) {
 	key := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 	expiredAt := h.now.Add(-time.Minute)
 	expired := model.IdempotencyRecord{Key: key, RequestHash: "old", TripID: h.id, ExpiresAt: expiredAt}
-	saved := model.Trip{ID: h.id, Status: "active", StartedAt: h.now}
+	saved := model.Trip{ID: h.id, Status: string(domain.StatusActive), StartedAt: h.now}
 
 	gomock.InOrder(
 		h.keys.EXPECT().Get(gomock.Any(), key).Return(expired, nil),

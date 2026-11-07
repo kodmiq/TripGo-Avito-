@@ -44,10 +44,12 @@ func Tracing(tp trace.TracerProvider) func(http.Handler) http.Handler {
 	}
 }
 
+const unknownRoute = "unknown"
+
 func routePattern(r *http.Request) string {
 	route := chi.RouteContext(r.Context())
 	if route == nil {
-		return "unknown"
+		return unknownRoute
 	}
 	// RoutePattern заполняется по мере прохода по дереву chi и до вызова
 	// next ещё пустой. Повторный поиск по тому же дереву даёт шаблон сразу,
@@ -56,14 +58,14 @@ func routePattern(r *http.Request) string {
 		return pattern
 	}
 	if route.Routes == nil {
-		return "unknown"
+		return unknownRoute
 	}
 	matched := chi.NewRouteContext()
 	if !route.Routes.Match(matched, r.Method, r.URL.Path) {
-		return "unknown"
+		return unknownRoute
 	}
 	if pattern := matched.RoutePattern(); pattern != "" {
 		return pattern
 	}
-	return "unknown"
+	return unknownRoute
 }

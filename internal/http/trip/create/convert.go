@@ -14,7 +14,10 @@ import (
 	"github.com/kodmiq/TripGo-Avito-/internal/model"
 )
 
-const maxBodyBytes = 1 << 20
+const (
+	maxBodyBytes                  = 1 << 20
+	detailRequestValidationFailed = "Request validation failed"
+)
 
 func decodeCreateTrip(r *http.Request) (model.CreateTrip, error) {
 	if err := requireJSON(r); err != nil {
@@ -41,7 +44,7 @@ func decodeCreateTrip(r *http.Request) (model.CreateTrip, error) {
 
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
-		return model.CreateTrip{}, &domain.ValidationError{Detail: "Request validation failed"}
+		return model.CreateTrip{}, &domain.ValidationError{Detail: detailRequestValidationFailed}
 	}
 	for _, key := range []string{"user_id", "driver_id", "start_point", "end_point", "price"} {
 		if _, ok := obj[key]; !ok {
@@ -119,8 +122,8 @@ func invalidBody(err error) error {
 	case strings.Contains(message, "unknown field"):
 		return &domain.ValidationError{Detail: "unknown field in request body"}
 	case strings.Contains(message, "cannot unmarshal"), strings.Contains(message, "unexpected EOF"):
-		return &domain.ValidationError{Detail: "Request validation failed"}
+		return &domain.ValidationError{Detail: detailRequestValidationFailed}
 	default:
-		return &domain.ValidationError{Detail: "Request validation failed"}
+		return &domain.ValidationError{Detail: detailRequestValidationFailed}
 	}
 }

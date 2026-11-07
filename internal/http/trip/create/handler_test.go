@@ -19,7 +19,10 @@ import (
 	"github.com/kodmiq/TripGo-Avito-/internal/model"
 )
 
-const validBody = `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":59.9398,"longitude":30.3146},"end_point":{"latitude":59.9290,"longitude":30.3626},"price":1450}`
+const (
+	validBody       = `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":59.9398,"longitude":30.3146},"end_point":{"latitude":59.9290,"longitude":30.3626},"price":1450}`
+	jsonContentType = "application/json"
+)
 
 func TestCreateTripSuccess(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -31,7 +34,7 @@ func TestCreateTripSuccess(t *testing.T) {
 		DriverID: uuid.MustParse("6cb72c04-7650-45c9-a79b-bcdba0631e0c"),
 	}, true, nil)
 
-	rec := callCreate(t, create.New(uc, slog.New(slog.DiscardHandler)), validBody, "application/json", api.CreateTripParams{})
+	rec := callCreate(t, create.New(uc, slog.New(slog.DiscardHandler)), validBody, jsonContentType, api.CreateTripParams{})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
@@ -57,7 +60,7 @@ func TestCreateTripReplay(t *testing.T) {
 		},
 	)
 
-	rec := callCreate(t, create.New(uc, slog.New(slog.DiscardHandler)), validBody, "application/json", api.CreateTripParams{IdempotencyKey: &apiKey})
+	rec := callCreate(t, create.New(uc, slog.New(slog.DiscardHandler)), validBody, jsonContentType, api.CreateTripParams{IdempotencyKey: &apiKey})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
@@ -71,7 +74,7 @@ func TestCreateTripDriverBusy(t *testing.T) {
 	uc := NewMockcreator(ctrl)
 	uc.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(model.Trip{}, false, domain.ErrDriverBusy)
 
-	rec := callCreate(t, create.New(uc, slog.New(slog.DiscardHandler)), validBody, "application/json", api.CreateTripParams{})
+	rec := callCreate(t, create.New(uc, slog.New(slog.DiscardHandler)), validBody, jsonContentType, api.CreateTripParams{})
 	assertProblem(t, rec, http.StatusConflict, "driver_busy", "")
 }
 
@@ -81,7 +84,7 @@ func TestCreateTripRepositoryErrorHidesDetails(t *testing.T) {
 	secret := "pq: password=secret-db-password"
 	uc.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(model.Trip{}, false, errors.New(secret))
 
-	rec := callCreate(t, create.New(uc, slog.New(slog.DiscardHandler)), validBody, "application/json", api.CreateTripParams{})
+	rec := callCreate(t, create.New(uc, slog.New(slog.DiscardHandler)), validBody, jsonContentType, api.CreateTripParams{})
 	assertProblem(t, rec, http.StatusInternalServerError, "internal_error", secret)
 }
 
@@ -93,12 +96,12 @@ func TestCreateTripInvalidBody(t *testing.T) {
 		wantDetail  string
 	}{
 		{name: "content type", body: validBody, contentType: "text/plain", wantDetail: "Content-Type must be application/json"},
-		{name: "empty", body: "", contentType: "application/json", wantDetail: "request body is required"},
-		{name: "missing price", body: `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":1,"longitude":2},"end_point":{"latitude":3,"longitude":4}}`, contentType: "application/json", wantDetail: "price is required"},
-		{name: "unknown field", body: `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":1,"longitude":2},"end_point":{"latitude":3,"longitude":4},"price":1,"extra":true}`, contentType: "application/json", wantDetail: "unknown field in request body"},
-		{name: "latitude", body: `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":100,"longitude":2},"end_point":{"latitude":3,"longitude":4},"price":1}`, contentType: "application/json", wantDetail: "start_point.latitude must be between -90 and 90"},
-		{name: "negative price", body: `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":1,"longitude":2},"end_point":{"latitude":3,"longitude":4},"price":-1}`, contentType: "application/json", wantDetail: "price must be greater than or equal to 0"},
-		{name: "empty user", body: `{"user_id":"00000000-0000-0000-0000-000000000000","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":1,"longitude":2},"end_point":{"latitude":3,"longitude":4},"price":1}`, contentType: "application/json", wantDetail: "user_id must be a non-empty UUID"},
+		{name: "empty", body: "", contentType: jsonContentType, wantDetail: "request body is required"},
+		{name: "missing price", body: `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":1,"longitude":2},"end_point":{"latitude":3,"longitude":4}}`, contentType: jsonContentType, wantDetail: "price is required"},
+		{name: "unknown field", body: `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":1,"longitude":2},"end_point":{"latitude":3,"longitude":4},"price":1,"extra":true}`, contentType: jsonContentType, wantDetail: "unknown field in request body"},
+		{name: "latitude", body: `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":100,"longitude":2},"end_point":{"latitude":3,"longitude":4},"price":1}`, contentType: jsonContentType, wantDetail: "start_point.latitude must be between -90 and 90"},
+		{name: "negative price", body: `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":1,"longitude":2},"end_point":{"latitude":3,"longitude":4},"price":-1}`, contentType: jsonContentType, wantDetail: "price must be greater than or equal to 0"},
+		{name: "empty user", body: `{"user_id":"00000000-0000-0000-0000-000000000000","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":1,"longitude":2},"end_point":{"latitude":3,"longitude":4},"price":1}`, contentType: jsonContentType, wantDetail: "user_id must be a non-empty UUID"},
 	}
 
 	for _, tt := range tests {
