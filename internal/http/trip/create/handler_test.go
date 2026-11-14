@@ -29,7 +29,7 @@ func TestCreateTripSuccess(t *testing.T) {
 	uc := NewMockcreator(ctrl)
 	id := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	uc.EXPECT().Create(gomock.Any(), gomock.Any(), (*uuid.UUID)(nil)).Return(model.Trip{
-		ID: id, Status: "active", Price: 1450,
+		ID: id, Status: string(domain.StatusActive), Price: 1450,
 		UserID:   uuid.MustParse("5cb72c04-7650-45c9-a79b-bcdba0631e0c"),
 		DriverID: uuid.MustParse("6cb72c04-7650-45c9-a79b-bcdba0631e0c"),
 	}, true, nil)
@@ -46,6 +46,30 @@ func TestCreateTripSuccess(t *testing.T) {
 	}
 }
 
+func TestCreateTripExplicitZero(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	uc := NewMockcreator(ctrl)
+	id := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	uc.EXPECT().Create(gomock.Any(), gomock.Any(), (*uuid.UUID)(nil)).DoAndReturn(
+		func(_ context.Context, in model.CreateTrip, _ *uuid.UUID) (model.Trip, bool, error) {
+			if in.Price != 0 || in.StartLat != 0 || in.StartLon != 0 || in.EndLat != 0 || in.EndLon != 0 {
+				t.Fatalf("zero values were rewritten: %+v", in)
+			}
+			return model.Trip{
+				ID: id, Status: string(domain.StatusActive),
+				UserID:   in.UserID,
+				DriverID: in.DriverID,
+			}, true, nil
+		},
+	)
+
+	body := `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":0,"longitude":0},"end_point":{"latitude":0,"longitude":0},"price":0}`
+	rec := callCreate(t, create.New(uc, slog.New(slog.DiscardHandler)), body, jsonContentType, api.CreateTripParams{})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestCreateTripReplay(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	uc := NewMockcreator(ctrl)
@@ -56,7 +80,7 @@ func TestCreateTripReplay(t *testing.T) {
 			if got == nil || *got != key {
 				t.Fatalf("idempotency key = %v", got)
 			}
-			return model.Trip{ID: key, Status: "active"}, false, nil
+			return model.Trip{ID: key, Status: string(domain.StatusActive)}, false, nil
 		},
 	)
 
@@ -98,6 +122,9 @@ func TestCreateTripInvalidBody(t *testing.T) {
 		{name: "content type", body: validBody, contentType: "text/plain", wantDetail: "Content-Type must be application/json"},
 		{name: "empty", body: "", contentType: jsonContentType, wantDetail: "request body is required"},
 		{name: "missing price", body: `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":1,"longitude":2},"end_point":{"latitude":3,"longitude":4}}`, contentType: jsonContentType, wantDetail: "price is required"},
+		{name: "null price", body: `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":1,"longitude":2},"end_point":{"latitude":3,"longitude":4},"price":null}`, contentType: jsonContentType, wantDetail: "price must not be null"},
+		{name: "null start", body: `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":null,"end_point":{"latitude":3,"longitude":4},"price":1}`, contentType: jsonContentType, wantDetail: "start_point must not be null"},
+		{name: "null latitude", body: `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":null,"longitude":2},"end_point":{"latitude":3,"longitude":4},"price":1}`, contentType: jsonContentType, wantDetail: "start_point.latitude must not be null"},
 		{name: "unknown field", body: `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":1,"longitude":2},"end_point":{"latitude":3,"longitude":4},"price":1,"extra":true}`, contentType: jsonContentType, wantDetail: "unknown field in request body"},
 		{name: "latitude", body: `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":100,"longitude":2},"end_point":{"latitude":3,"longitude":4},"price":1}`, contentType: jsonContentType, wantDetail: "start_point.latitude must be between -90 and 90"},
 		{name: "negative price", body: `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"6cb72c04-7650-45c9-a79b-bcdba0631e0c","start_point":{"latitude":1,"longitude":2},"end_point":{"latitude":3,"longitude":4},"price":-1}`, contentType: jsonContentType, wantDetail: "price must be greater than or equal to 0"},

@@ -47,8 +47,12 @@ func decodeCreateTrip(r *http.Request) (model.CreateTrip, error) {
 		return model.CreateTrip{}, &domain.ValidationError{Detail: detailRequestValidationFailed}
 	}
 	for _, key := range []string{"user_id", "driver_id", "start_point", "end_point", "price"} {
-		if _, ok := obj[key]; !ok {
+		raw, ok := obj[key]
+		if !ok {
 			return model.CreateTrip{}, &domain.ValidationError{Detail: key + " is required"}
+		}
+		if err := rejectNull(raw, key); err != nil {
+			return model.CreateTrip{}, err
 		}
 	}
 	if err := requireCoordinates(obj["start_point"], "start_point"); err != nil {
@@ -102,16 +106,29 @@ func readBody(r *http.Request) ([]byte, error) {
 	return raw, nil
 }
 
+func rejectNull(raw json.RawMessage, name string) error {
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return &domain.ValidationError{Detail: name + " must not be null"}
+	}
+	return nil
+}
+
 func requireCoordinates(raw json.RawMessage, name string) error {
+	if err := rejectNull(raw, name); err != nil {
+		return err
+	}
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		return &domain.ValidationError{Detail: name + " must be an object"}
 	}
-	if _, ok := obj["latitude"]; !ok {
-		return &domain.ValidationError{Detail: name + ".latitude is required"}
-	}
-	if _, ok := obj["longitude"]; !ok {
-		return &domain.ValidationError{Detail: name + ".longitude is required"}
+	for _, axis := range []string{"latitude", "longitude"} {
+		value, ok := obj[axis]
+		if !ok {
+			return &domain.ValidationError{Detail: name + "." + axis + " is required"}
+		}
+		if err := rejectNull(value, name+"."+axis); err != nil {
+			return err
+		}
 	}
 	return nil
 }

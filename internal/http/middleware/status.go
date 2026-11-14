@@ -23,3 +23,12 @@ func (s *statusRecorder) Write(body []byte) (int, error) {
 	}
 	return s.ResponseWriter.Write(body)
 }
+
+// finishStatus — код, который записывают лог, метрика и спан.
+// Паника до WriteHeader означает ответ 500: заголовок отправит Recover.
+func finishStatus(rec *statusRecorder, panicked bool) int {
+	if panicked && !rec.wrote {
+		rec.status = http.StatusInternalServerError
+	}
+	return rec.status
+}

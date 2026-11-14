@@ -40,10 +40,15 @@ func Metrics(meter metric.Meter) (func(http.Handler) http.Handler, error) {
 			start := time.Now()
 			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 			defer func() {
+				recovered := recover()
+				status := finishStatus(rec, recovered != nil)
 				active.Add(ctx, -1, metric.WithAttributes(labels...))
 				duration.Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(append(labels,
-					attribute.Int("http.response.status_code", rec.status),
+					attribute.Int("http.response.status_code", status),
 				)...))
+				if recovered != nil {
+					panic(recovered)
+				}
 			}()
 			next.ServeHTTP(rec, r)
 		})

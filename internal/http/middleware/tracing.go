@@ -19,21 +19,22 @@ func Tracing(tp trace.TracerProvider) func(http.Handler) http.Handler {
 			span := trace.SpanFromContext(r.Context())
 			defer func() {
 				recovered := recover()
-				if recovered == nil {
-					return
+				status := finishStatus(rec, recovered != nil)
+				route := routePattern(r)
+				span.SetName(r.Method + " " + route)
+				span.SetAttributes(
+					attribute.String("http.route", route),
+					attribute.Int("http.response.status_code", status),
+				)
+				if recovered != nil || status >= http.StatusInternalServerError {
+					span.SetStatus(codes.Error, "")
+					span.SetAttributes(attribute.String("error.type", "500"))
 				}
-				span.SetStatus(codes.Error, "")
-				span.SetAttributes(attribute.String("error.type", "500"))
-				panic(recovered)
+				if recovered != nil {
+					panic(recovered)
+				}
 			}()
 			next.ServeHTTP(rec, r)
-			route := routePattern(r)
-			span.SetName(r.Method + " " + route)
-			span.SetAttributes(attribute.String("http.route", route))
-			if rec.status >= http.StatusInternalServerError {
-				span.SetStatus(codes.Error, "")
-				span.SetAttributes(attribute.String("error.type", "500"))
-			}
 		})
 		return otelhttp.NewMiddleware("http.request",
 			otelhttp.WithTracerProvider(tp),

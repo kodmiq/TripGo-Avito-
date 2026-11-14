@@ -17,7 +17,7 @@ func TestTracingNamesSpanByRouteTemplate(t *testing.T) {
 
 	router := chi.NewRouter()
 	router.Use(Tracing(tp))
-	router.Get("/api/v1/trips/{tripId}", func(w http.ResponseWriter, _ *http.Request) {
+	router.Get(tripRoute, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -29,7 +29,7 @@ func TestTracingNamesSpanByRouteTemplate(t *testing.T) {
 		t.Fatalf("spans = %d", len(spans))
 	}
 	span := spans[0]
-	if span.Name() != "GET /api/v1/trips/{tripId}" {
+	if span.Name() != "GET "+tripRoute {
 		t.Fatalf("span name = %q", span.Name())
 	}
 	if span.Status().Code != codes.Unset {
