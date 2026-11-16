@@ -35,8 +35,9 @@ func TestListReturnsRepositoryOrder(t *testing.T) {
 	positions := NewMockpositionRepository(ctrl)
 	id := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	uc := listpositions.New(trips, positions)
+	const wantID int64 = 1
 	want := []model.Position{{
-		ID: 1, TripID: id, Latitude: 1, Longitude: 2,
+		ID: wantID, TripID: id, Latitude: 1, Longitude: 2,
 		RecordedAt: time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC),
 	}}
 
@@ -50,7 +51,7 @@ func TestListReturnsRepositoryOrder(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("List() = %+v", got)
 	}
-	if got[0].ID != want[0].ID {
+	if got[0].ID != wantID {
 		t.Fatalf("List() = %+v", got)
 	}
 }

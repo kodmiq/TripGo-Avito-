@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kodmiq/TripGo-Avito-/internal/config"
+	"github.com/kodmiq/TripGo-Avito-/internal/gateway/push"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/health"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/ready"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/server"
@@ -30,14 +31,17 @@ import (
 	finishuc "github.com/kodmiq/TripGo-Avito-/internal/usecase/trip/finish"
 	getuc "github.com/kodmiq/TripGo-Avito-/internal/usecase/trip/get"
 	listuc "github.com/kodmiq/TripGo-Avito-/internal/usecase/trip/listpositions"
+	"github.com/kodmiq/TripGo-Avito-/internal/worker/positions"
 )
 
-// App — собранный процесс. main запускает Server и по остановке вызывает Close.
+// App — собранный процесс. main запускает Server и по остановке сначала
+// останавливает фон, потом вызывает Close.
 type App struct {
-	Server *http.Server
-	Logger *slog.Logger
-	once   sync.Once
-	close  func(context.Context)
+	Server         *http.Server
+	Logger         *slog.Logger
+	once           sync.Once
+	close          func(context.Context)
+	stopBackground func(context.Context) error
 }
 
 func (a *App) Close(ctx context.Context) {
@@ -45,6 +49,14 @@ func (a *App) Close(ctx context.Context) {
 		return
 	}
 	a.once.Do(func() { a.close(ctx) })
+}
+
+// StopBackground останавливает сканер и даёт воркерам доработать очередь.
+func (a *App) StopBackground(ctx context.Context) error {
+	if a.stopBackground == nil {
+		return nil
+	}
+	return a.stopBackground(ctx)
 }
 
 type systemClock struct{}
@@ -58,11 +70,6 @@ type systemIDs struct{}
 func (systemIDs) New() uuid.UUID {
 	return uuid.New()
 }
-
-// nopQueue заменяется пулом опроса, когда тот подключается к процессу.
-type nopQueue struct{}
-
-func (nopQueue) Cancel(context.Context, uuid.UUID) {}
 
 // New создаёт конкретные реализации и связывает их. Пул, телеметрия и репозитории рождаются только здесь.
 func New(ctx context.Context, cfg config.Config) (*App, error) {
@@ -107,6 +114,34 @@ func wire(cfg config.Config, tel telemetry.Providers, pool *pgxpool.Pool) (*App,
 		return nil, err
 	}
 
+	pushClient, err := push.New(cfg.PushHTTPURL, cfg.PushRequestTimeout, tel.Tracer.Tracer("trip-service"))
+	if err != nil {
+		return nil, err
+	}
+	poller, err := positions.New(positions.Config{
+		Interval:    cfg.PositionCheckInterval,
+		StaleAfter:  cfg.PositionStaleAfter,
+		Workers:     cfg.PositionWorkers,
+		QueueSize:   cfg.PositionQueueSize,
+		BatchSize:   cfg.PositionScanBatchSize,
+		PushTimeout: cfg.PushRequestTimeout,
+	}, positions.Dependencies{
+		Trips:   trips,
+		Push:    pushClient,
+		Metrics: tel.Positions,
+		Log:     log,
+		Tracer:  tel.Tracer.Tracer("trip-service"),
+		Now:     clock.Now,
+	})
+	if err != nil {
+		pushClient.Close()
+		return nil, err
+	}
+	if err := telemetry.WatchPositionPool(meter, poller.QueueSize, poller.ActiveWorkers); err != nil {
+		pushClient.Close()
+		return nil, err
+	}
+
 	createTrip := createuc.New(tx, trips, history, keys, cfg.IdempotencyTTL, clock, systemIDs{}, log, tel.Trips)
 	getTrip := getuc.New(trips)
 	finishTrip := finishuc.New(tx, trips, history, clock, log, tel.Trips)
@@ -117,7 +152,7 @@ func wire(cfg config.Config, tel telemetry.Providers, pool *pgxpool.Pool) (*App,
 		httpcreate.New(createTrip, log),
 		httpget.New(getTrip, log),
 		httpfinish.New(finishTrip, log),
-		httpadd.New(addPosition, nopQueue{}, log),
+		httpadd.New(addPosition, poller, log),
 		httplist.New(listPositions, log),
 		health.New(),
 		ready.New(pool, cfg.DatabaseConnectTimeout, log),
@@ -126,8 +161,10 @@ func wire(cfg config.Config, tel telemetry.Providers, pool *pgxpool.Pool) (*App,
 		meter,
 	)
 	if err != nil {
+		pushClient.Close()
 		return nil, err
 	}
+	poller.Start(context.Background())
 
 	return &App{
 		Logger: log,
@@ -139,7 +176,9 @@ func wire(cfg config.Config, tel telemetry.Providers, pool *pgxpool.Pool) (*App,
 			WriteTimeout:      cfg.HTTPWriteTimeout,
 			IdleTimeout:       cfg.HTTPIdleTimeout,
 		},
+		stopBackground: poller.Shutdown,
 		close: func(ctx context.Context) {
+			pushClient.Close()
 			if err := tel.Shutdown(ctx); err != nil {
 				log.ErrorContext(ctx, "telemetry shutdown", "err", err)
 			}

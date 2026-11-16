@@ -35,11 +35,6 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-		defer cancel()
-		app.Close(ctx)
-	}()
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -50,24 +45,38 @@ func run() error {
 	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	var serveErr error
 	select {
 	case err := <-errCh:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			return err
+			serveErr = err
 		}
-		return nil
 	case <-signalCtx.Done():
 		app.Logger.Info("shutdown signal received")
 	}
 
+	// Один бюджет на всю остановку, порядок фиксирован:
+	// 1. HTTP перестаёт принимать новое и дожидается текущих запросов.
+	// 2–3. StopBackground гасит сканер, затем воркеры дорабатывают очередь.
+	// 4. Close закрывает клиент Push Service, сбрасывает телеметрию и пул БД.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 	if err := app.Server.Shutdown(shutdownCtx); err != nil {
 		app.Logger.Error("shutdown budget exceeded", "timeout", cfg.ShutdownTimeout.String(), "err", err)
-		app.Close(shutdownCtx)
-		return fmt.Errorf("shutdown budget of %s exceeded: %w", cfg.ShutdownTimeout, err)
+		if serveErr == nil {
+			serveErr = fmt.Errorf("shutdown budget of %s exceeded: %w", cfg.ShutdownTimeout, err)
+		}
+	}
+	if err := app.StopBackground(shutdownCtx); err != nil {
+		app.Logger.Error("background shutdown", "err", err)
+		if serveErr == nil {
+			serveErr = err
+		}
 	}
 	app.Close(shutdownCtx)
+	if serveErr != nil {
+		return serveErr
+	}
 	app.Logger.Info("shutdown complete")
 	return nil
 }

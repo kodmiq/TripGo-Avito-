@@ -22,7 +22,7 @@ func TestQueuePopsOldestFirst(t *testing.T) {
 		}
 	}
 
-	var order []uuid.UUID
+	order := make([]uuid.UUID, 0, len(ids))
 	for range ids {
 		item, ok := queue.pop()
 		if !ok {
