@@ -65,8 +65,9 @@ func Trip(w http.ResponseWriter, status int, trip model.Trip, location string) {
 		EndPoint:   api.Coordinates{Latitude: trip.EndLat, Longitude: trip.EndLon},
 		Price:      trip.Price,
 		Status:     api.TripStatus(trip.Status),
-		StartedAt:  trip.StartedAt,
-		FinishedAt: trip.FinishedAt,
+		StartedAt:      trip.StartedAt,
+		FinishedAt:     trip.FinishedAt,
+		LastPositionAt: trip.LastPositionAt,
 	}
 	JSON(w, status, body)
 }

@@ -80,6 +80,24 @@ func (t *Trip) Finish(at time.Time) error {
 	return nil
 }
 
+// PositionFutureSkew — насколько recorded_at может опережать часы сервиса.
+// Более поздняя отметка ещё не могла быть зафиксирована на устройстве.
+const PositionFutureSkew = time.Minute
+
+// ValidatePosition проверяет координату до записи в базу.
+func ValidatePosition(latitude, longitude float64, recordedAt, now time.Time) error {
+	if err := validateCoordinates(latitude, longitude, "coordinates"); err != nil {
+		return err
+	}
+	if recordedAt.IsZero() {
+		return &ValidationError{Detail: "recorded_at must be a valid timestamp"}
+	}
+	if recordedAt.After(now.Add(PositionFutureSkew)) {
+		return &ValidationError{Detail: "recorded_at must not be more than a minute in the future"}
+	}
+	return nil
+}
+
 func validateCoordinates(latitude, longitude float64, name string) error {
 	if latitude < -90 || latitude > 90 {
 		return &ValidationError{Detail: fmt.Sprintf("%s.latitude must be between -90 and 90", name)}
