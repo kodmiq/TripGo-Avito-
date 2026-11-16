@@ -13,7 +13,7 @@ import (
 	"github.com/kodmiq/TripGo-Avito-/internal/container"
 )
 
-//go:generate go tool oapi-codegen -generate types,chi-server -package api -include-operation-ids createTrip,getTrip,finishTrip,health,ready -o ../../internal/generated/api.gen.go ../../contracts/openapi/trip-service.openapi.yaml
+//go:generate go tool oapi-codegen -generate types,chi-server -package api -include-operation-ids createTrip,getTrip,finishTrip,createTripPosition,listTripPositions,health,ready -o ../../internal/generated/api.gen.go ../../contracts/openapi/trip-service.openapi.yaml
 
 func main() {
 	if err := run(); err != nil {

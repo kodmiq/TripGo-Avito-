@@ -42,6 +42,27 @@ func (t Trips) TripCompleted(ctx context.Context) {
 	t.completed.Add(ctx, 1)
 }
 
+// Positions считает сохранённые координаты.
+type Positions struct {
+	saved metric.Int64Counter
+}
+
+func newPositions(meter metric.Meter) (Positions, error) {
+	saved, err := meter.Int64Counter(
+		"tripgo.positions.saved",
+		metric.WithUnit("{position}"),
+		metric.WithDescription("Saved coordinates"),
+	)
+	if err != nil {
+		return Positions{}, err
+	}
+	return Positions{saved: saved}, nil
+}
+
+func (p Positions) PositionSaved(ctx context.Context) {
+	p.saved.Add(ctx, 1)
+}
+
 // WatchActiveTrips снимает число активных поездок в момент сбора метрик.
 func WatchActiveTrips(meter metric.Meter, log *slog.Logger, count func(context.Context) (int64, error)) error {
 	gauge, err := meter.Int64ObservableGauge(
