@@ -1,6 +1,6 @@
 # Trip Service
 
-HTTP-сервис поездок TripGo. Лабораторная работа 2: те же ручки, что в первой, разложенные по слоям, с тестами, линтером и OpenTelemetry.
+HTTP-сервис поездок TripGo. Лабораторная работа 3: координаты маршрута, выборка поездок без свежих точек и опрос устройства через ограниченную очередь и пул воркеров.
 
 Модуль: `github.com/kodmiq/TripGo-Avito-`.
 
@@ -9,7 +9,7 @@ HTTP-сервис поездок TripGo. Лабораторная работа 2
 - Go 1.26
 - `golangci-lint` v2
 - `tripgoctl` и запущенный Docker
-- В корне лежит `environment.toml` (`lab = 2`, компоненты `postgres` и `observability`)
+- В корне лежит `environment.toml` (`lab = 3`, компоненты `postgres`, `observability` и `push`)
 
 ## Запуск
 
@@ -28,7 +28,7 @@ make run
 
 ## Переменные окружения
 
-ЛР1 и ЛР2 читают эти переменные. Пустое значение или таймаут `0s` — сервис не стартует.
+Сервис читает эти переменные. Пустое значение, ноль или таймаут `0s` — процесс не стартует.
 
 | Переменная | Пример | Зачем |
 |---|---|---|
@@ -51,8 +51,15 @@ make run
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | `http/protobuf` или `grpc` |
 | `OTEL_RESOURCE_ATTRIBUTES` | `service.namespace=tripgo,deployment.environment=local` | пары `key=value` через запятую |
 | `OTEL_TRACES_SAMPLER` | `parentbased_always_on` | `always_on`, `always_off`, `parentbased_always_on`, `parentbased_always_off` |
+| `POSITION_CHECK_INTERVAL` | `30s` | период сканера. Это же пауза между повторными пушами по одной поездке |
+| `POSITION_STALE_AFTER` | `60s` | поездка попадает в выборку, если с последней координаты (или с `started_at`) прошло больше этого срока |
+| `POSITION_WORKERS` | `4` | фиксированное число воркеров |
+| `POSITION_QUEUE_SIZE` | `100` | ёмкость очереди |
+| `POSITION_SCAN_BATCH_SIZE` | `100` | сколько строк сканер читает за один запрос |
+| `PUSH_HTTP_URL` | из `tripgoctl` | базовый URL Push Service |
+| `PUSH_REQUEST_TIMEOUT` | `1s` | таймаут одного вызова Push Service |
 
-В `.env.example` также лежат имена переменных следующих лабораторных. Сервис их пока не читает, переименовывать нельзя.
+`PUSH_ADMIN_URL` сервис не читает: им пользуются вручную, чтобы задержать заглушку. Имена переменных ЛР4 и ЛР5 лежат в `.env.example` заранее, переименовывать их нельзя.
 
 ## Команды
 
@@ -77,6 +84,8 @@ make run
 | `POST` | `/api/v1/trips` | `201` и заголовок `Location` |
 | `GET` | `/api/v1/trips/{tripId}` | `200` |
 | `POST` | `/api/v1/trips/{tripId}/finish` | `200` |
+| `POST` | `/api/v1/trips/{tripId}/positions` | `201` |
+| `GET` | `/api/v1/trips/{tripId}/positions` | `200`, все точки по `recorded_at`, затем по `id` |
 | `GET` | `/health` | `200`, в базу не ходит |
 | `GET` | `/ready` | `200`, если база доступна, иначе `503` |
 
@@ -86,7 +95,7 @@ make run
 
 | HTTP | `code` | Когда |
 |---|---|---|
-| 400 | `invalid_request` | плохое тело или `tripId` не UUID |
+| 400 | `invalid_request` | плохое тело, `tripId` не UUID, координаты вне диапазона или `recorded_at` в будущем больше чем на минуту |
 | 404 | `trip_not_found` | поездки нет |
 | 409 | `driver_busy` | у водителя уже есть активная поездка |
 | 409 | `trip_completed` | поездка уже завершена |
@@ -232,10 +241,11 @@ make lint
 
 | Слой | Где | От кого зависит |
 |---|---|---|
-| вход | `cmd/service` | только `config` и `container`: читает окружение, запускает сервер, по сигналу останавливает его |
-| сборка | `internal/container` | единственное место, где создаются пул, телеметрия, репозитории и usecase |
+| вход | `cmd/service` | только `config` и `container`: читает окружение, запускает сервер, по сигналу останавливает HTTP, затем фон |
+| сборка | `internal/container` | единственное место, где создаются пул, телеметрия, репозитории, usecase, клиент Push Service и пул воркеров |
 | транспорт | `internal/http` | usecase через интерфейс в `contract.go` своей ручки. `repository` и `infra` отсюда не импортируются |
-| сценарий | `internal/usecase/trip/{create,get,finish}` | домен и узкие интерфейсы репозитория, транзакции, часов, идентификаторов, метрик |
+| сценарий | `internal/usecase/trip/{create,get,finish,addposition,listpositions}` | домен и узкие интерфейсы репозитория, транзакции, часов, идентификаторов, метрик |
+| фон | `internal/worker/positions` | очередь и пул. Интерфейс Push Service объявлен здесь, реализация — в `internal/gateway/push` |
 | правила | `internal/domain/trip` | ни от какого другого пакета сервиса. Переход `active → completed` — метод `Finish` |
 | данные | `internal/repository` | SQL и модель. Реализует интерфейсы, которые объявил usecase |
 | внешний мир | `internal/infra` | пул pgx, менеджер транзакций, OpenTelemetry и `slog` |
@@ -253,6 +263,55 @@ make lint
 - точка входа — `cmd/service`, как в дереве этой работы.
 
 Сгенерированный клиент контракта остаётся в `internal/generated` и исключён из линтера: этот код не пишется руками.
+
+## Опрос устаревших поездок
+
+Пока поездка `active`, устройство шлёт координаты. Если их давно не было, сервис сам просит точку через Push Service. На каждую поездку горутина не заводится: активных поездок планируются десятки тысяч, и таймер на поездку столько горутин не переживёт.
+
+```
+тикер
+  → сканер (один запрос за порцией, из БД)
+    → очередь с приоритетом, ёмкость POSITION_QUEUE_SIZE
+      → POSITION_WORKERS воркеров
+        → HTTP Push Service, kind = REQUEST_POSITION
+```
+
+Сканер — одна горутина с периодом `POSITION_CHECK_INTERVAL`. Пока тик не закончился, следующий не стартует. Выборка идёт из PostgreSQL, в памяти список поездок не хранится. В неё попадают только `active`, у которых `COALESCE(last_position_at, started_at)` старше `POSITION_STALE_AFTER`. Порог вычитается в SQL. Порции по `POSITION_SCAN_BATCH_SIZE` продолжаются ключом `(silent_since, id)`, без `OFFSET`: одинаковое время на границе порции не теряет строку и не читает её дважды. Первый `dropped` на тике останавливает чтение, следующий тик снова начинается с самых старых.
+
+Очередь — не канал. Воркер всегда берёт поездку, которая молчит дольше всех (`last_position_at`, а если координат не было — `started_at`). Одна поездка не стоит в очереди дважды: это map под тем же мьютексом, что и куча. Сканер, воркеры и хендлер координаты берут этот мьютекс. Когда координата сохранилась, хендлер удаляет поездку из очереди, и в Push Service запрос не уходит.
+
+Если очередь полна, новая поездка сравнивается с самой свежей в ней. Молчит дольше — занимает её место, вытесненная считается `dropped`. Свежее всех — дропается сама. Постановка не блокируется: медленный Push Service не останавливает сканер и HTTP. Поездка не пропадает: на следующем тике она снова в выборке, если координата так и не пришла. Период тикера и есть пауза между повторными пушами, отдельная отметка об отправке не хранится.
+
+Воркеров ровно `POSITION_WORKERS`, горутина на задачу не создаётся. Вызов Push Service идёт своим `http.Client` с таймаутом `PUSH_REQUEST_TIMEOUT`, одна попытка. Ошибка транспорта и код `4xx`/`5xx` — разные ошибки; воркер пишет `Warn` и берёт следующую задачу.
+
+Остановка по `SIGINT`/`SIGTERM` в пределах одного `SHUTDOWN_TIMEOUT`:
+
+1. HTTP перестаёт принимать запросы и дожидается текущих.
+2. Сканер останавливается, новые задачи не появляются.
+3. Воркеры дорабатывают то, что уже в очереди.
+4. Закрываются клиент Push Service, телеметрия и пул БД.
+
+Метрики: `tripgo.positions.saved`, `tripgo.stale_checks{result=queued|duplicate|dropped}`, `tripgo.stale_checks.rows_read`, `tripgo.position_requests.queue.size`, `tripgo.position_requests.workers.active`, `tripgo.position_requests{result=success|error|cancelled}`, `tripgo.position_requests.duration`. Спан `position.request` связан со спаном проверки ссылкой, не как ребёнок: обработка переживает тик.
+
+Проверка. Создать поездку и не слать координаты. Через `POSITION_STALE_AFTER` в `tripgoctl environment logs push-service` появляется `REQUEST_POSITION`, не чаще одного раза за `POSITION_CHECK_INTERVAL`. Если слать координаты каждые 5 секунд, команд не будет.
+
+```bash
+while true; do
+  curl -sS -X POST localhost:8080/api/v1/trips/$TRIP_ID/positions \
+    -H 'content-type: application/json' \
+    -d "{\"coordinates\":{\"latitude\":59.93,\"longitude\":30.33},\"recorded_at\":\"$(date -u +%FT%TZ)\"}" > /dev/null
+  sleep 5
+done
+```
+
+Задержка заглушки не должна останавливать сканер и ручки. После проверки сбросить её в ноль:
+
+```bash
+curl -fsS -X POST "$PUSH_ADMIN_URL/admin/behaviour" \
+  -H 'content-type: application/json' -d '{"latency_ms":5000}'
+curl -fsS -X POST "$PUSH_ADMIN_URL/admin/behaviour" \
+  -H 'content-type: application/json' -d '{"latency_ms":0}'
+```
 
 ## Решения
 
