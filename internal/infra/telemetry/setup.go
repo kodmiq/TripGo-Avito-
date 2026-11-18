@@ -23,12 +23,13 @@ import (
 // Providers — логгер, трейсы и метрики процесса. Экспорт идёт по OTLP;
 // недоступный коллектор не мешает запросам, ошибки уходят в Shutdown.
 type Providers struct {
-	Logger   *slog.Logger
-	Tracer   *sdktrace.TracerProvider
-	Meter    *metric.MeterProvider
-	DB       *DBTracer
-	Trips    Trips
-	shutdown func(context.Context) error
+	Logger    *slog.Logger
+	Tracer    *sdktrace.TracerProvider
+	Meter     *metric.MeterProvider
+	DB        *DBTracer
+	Trips     Trips
+	Positions Positions
+	shutdown  func(context.Context) error
 }
 
 func (p Providers) Shutdown(ctx context.Context) error {
@@ -80,13 +81,18 @@ func Setup(ctx context.Context, cfg config.Config) (Providers, error) {
 	if err != nil {
 		return Providers{}, err
 	}
+	positions, err := newPositions(meter)
+	if err != nil {
+		return Providers{}, err
+	}
 
 	return Providers{
-		Logger: log,
-		Tracer: tracer,
-		Meter:  meterProvider,
-		DB:     dbTracer,
-		Trips:  trips,
+		Logger:    log,
+		Tracer:    tracer,
+		Meter:     meterProvider,
+		DB:        dbTracer,
+		Trips:     trips,
+		Positions: positions,
 		shutdown: func(ctx context.Context) error {
 			traceErr := tracer.Shutdown(ctx)
 			metricErr := meterProvider.Shutdown(ctx)

@@ -29,6 +29,7 @@ func (r *Repository) Get(ctx context.Context, id uuid.UUID) (model.Trip, error) 
 		"status",
 		"started_at",
 		"finished_at",
+		"last_position_at",
 	).
 		From("trips").
 		Where(squirrel.Eq{"id": id}).

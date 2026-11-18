@@ -34,6 +34,14 @@ type Config struct {
 	OTELProtocol           string
 	OTELResourceAttributes string
 	OTELTracesSampler      string
+
+	PositionCheckInterval time.Duration
+	PositionStaleAfter    time.Duration
+	PositionWorkers       int
+	PositionQueueSize     int
+	PositionScanBatchSize int
+	PushHTTPURL           string
+	PushRequestTimeout    time.Duration
 }
 
 // LoadDotEnv читает .env.example, затем перекрывает его файлом .env от tripgoctl.
@@ -117,6 +125,27 @@ func Parse() (Config, error) {
 	if cfg.OTELTracesSampler, err = required("OTEL_TRACES_SAMPLER"); err != nil {
 		return Config{}, err
 	}
+	if cfg.PositionCheckInterval, err = duration("POSITION_CHECK_INTERVAL"); err != nil {
+		return Config{}, err
+	}
+	if cfg.PositionStaleAfter, err = duration("POSITION_STALE_AFTER"); err != nil {
+		return Config{}, err
+	}
+	if cfg.PositionWorkers, err = positiveInt("POSITION_WORKERS"); err != nil {
+		return Config{}, err
+	}
+	if cfg.PositionQueueSize, err = positiveInt("POSITION_QUEUE_SIZE"); err != nil {
+		return Config{}, err
+	}
+	if cfg.PositionScanBatchSize, err = positiveInt("POSITION_SCAN_BATCH_SIZE"); err != nil {
+		return Config{}, err
+	}
+	if cfg.PushHTTPURL, err = required("PUSH_HTTP_URL"); err != nil {
+		return Config{}, err
+	}
+	if cfg.PushRequestTimeout, err = duration("PUSH_REQUEST_TIMEOUT"); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
 }
 
@@ -148,6 +177,21 @@ func positiveInt32(key string) (int32, error) {
 	value, err := parseInt32(key)
 	if err != nil {
 		return 0, err
+	}
+	if value < 1 {
+		return 0, fmt.Errorf("environment variable %s must be greater than 0", key)
+	}
+	return value, nil
+}
+
+func positiveInt(key string) (int, error) {
+	raw, err := required(key)
+	if err != nil {
+		return 0, err
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("environment variable %s must be an integer: %w", key, err)
 	}
 	if value < 1 {
 		return 0, fmt.Errorf("environment variable %s must be greater than 0", key)

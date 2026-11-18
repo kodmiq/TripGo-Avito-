@@ -58,15 +58,16 @@ func Trip(w http.ResponseWriter, status int, trip model.Trip, location string) {
 		FinishedAt     *time.Time      `json:"finished_at"`
 		LastPositionAt *time.Time      `json:"last_position_at"`
 	}{
-		ID:         trip.ID,
-		UserID:     trip.UserID,
-		DriverID:   trip.DriverID,
-		StartPoint: api.Coordinates{Latitude: trip.StartLat, Longitude: trip.StartLon},
-		EndPoint:   api.Coordinates{Latitude: trip.EndLat, Longitude: trip.EndLon},
-		Price:      trip.Price,
-		Status:     api.TripStatus(trip.Status),
-		StartedAt:  trip.StartedAt,
-		FinishedAt: trip.FinishedAt,
+		ID:             trip.ID,
+		UserID:         trip.UserID,
+		DriverID:       trip.DriverID,
+		StartPoint:     api.Coordinates{Latitude: trip.StartLat, Longitude: trip.StartLon},
+		EndPoint:       api.Coordinates{Latitude: trip.EndLat, Longitude: trip.EndLon},
+		Price:          trip.Price,
+		Status:         api.TripStatus(trip.Status),
+		StartedAt:      trip.StartedAt,
+		FinishedAt:     trip.FinishedAt,
+		LastPositionAt: trip.LastPositionAt,
 	}
 	JSON(w, status, body)
 }

@@ -107,3 +107,37 @@ func TestNewActive(t *testing.T) {
 		t.Fatalf("NewActive() error = %v, want validation", err)
 	}
 }
+
+func TestValidatePosition(t *testing.T) {
+	now := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name       string
+		lat, lon   float64
+		recordedAt time.Time
+		wantDetail string
+	}{
+		{name: "ok", lat: 59.93, lon: 30.33, recordedAt: now},
+		{name: "exactly one minute ahead", lat: 0, lon: 0, recordedAt: now.Add(PositionFutureSkew)},
+		{name: "latitude", lat: 90.1, lon: 0, recordedAt: now, wantDetail: "coordinates.latitude must be between -90 and 90"},
+		{name: "longitude", lat: 0, lon: 180.1, recordedAt: now, wantDetail: "coordinates.longitude must be between -180 and 180"},
+		{name: "zero time", lat: 1, lon: 2, wantDetail: "recorded_at must be a valid timestamp"},
+		{name: "too far in the future", lat: 1, lon: 2, recordedAt: now.Add(PositionFutureSkew + time.Second), wantDetail: "recorded_at must not be more than a minute in the future"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidatePosition(tt.lat, tt.lon, tt.recordedAt, now)
+			if tt.wantDetail == "" {
+				if err != nil {
+					t.Fatalf("ValidatePosition() = %v", err)
+				}
+				return
+			}
+			var validation *ValidationError
+			if !errors.As(err, &validation) || validation.Detail != tt.wantDetail {
+				t.Fatalf("ValidatePosition() = %v, want detail %q", err, tt.wantDetail)
+			}
+		})
+	}
+}

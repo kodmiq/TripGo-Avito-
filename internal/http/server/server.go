@@ -14,9 +14,11 @@ import (
 	"github.com/kodmiq/TripGo-Avito-/internal/http/middleware"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/ready"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/respond"
+	httpadd "github.com/kodmiq/TripGo-Avito-/internal/http/trip/addposition"
 	httpcreate "github.com/kodmiq/TripGo-Avito-/internal/http/trip/create"
 	httpfinish "github.com/kodmiq/TripGo-Avito-/internal/http/trip/finish"
 	httpget "github.com/kodmiq/TripGo-Avito-/internal/http/trip/get"
+	httplist "github.com/kodmiq/TripGo-Avito-/internal/http/trip/listpositions"
 )
 
 // Server собирает ручки в один ServerInterface для oapi-codegen.
@@ -24,6 +26,8 @@ type Server struct {
 	create *httpcreate.Handler
 	get    *httpget.Handler
 	finish *httpfinish.Handler
+	add    *httpadd.Handler
+	list   *httplist.Handler
 	health *health.Handler
 	ready  *ready.Handler
 }
@@ -32,6 +36,8 @@ func New(
 	create *httpcreate.Handler,
 	get *httpget.Handler,
 	finish *httpfinish.Handler,
+	add *httpadd.Handler,
+	list *httplist.Handler,
 	healthHandler *health.Handler,
 	readyHandler *ready.Handler,
 	log *slog.Logger,
@@ -51,6 +57,8 @@ func New(
 		create: create,
 		get:    get,
 		finish: finish,
+		add:    add,
+		list:   list,
 		health: healthHandler,
 		ready:  readyHandler,
 	}, api.ChiServerOptions{
@@ -73,6 +81,14 @@ func (s Server) GetTrip(w http.ResponseWriter, r *http.Request, tripID api.TripI
 
 func (s Server) FinishTrip(w http.ResponseWriter, r *http.Request, tripID api.TripId) {
 	s.finish.FinishTrip(w, r, tripID)
+}
+
+func (s Server) CreateTripPosition(w http.ResponseWriter, r *http.Request, tripID api.TripId) {
+	s.add.CreateTripPosition(w, r, tripID)
+}
+
+func (s Server) ListTripPositions(w http.ResponseWriter, r *http.Request, tripID api.TripId) {
+	s.list.ListTripPositions(w, r, tripID)
 }
 
 func (s Server) Health(w http.ResponseWriter, r *http.Request) {

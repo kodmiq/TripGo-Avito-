@@ -16,9 +16,11 @@ import (
 	"github.com/kodmiq/TripGo-Avito-/internal/http/health"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/ready"
 	"github.com/kodmiq/TripGo-Avito-/internal/http/server"
+	httpadd "github.com/kodmiq/TripGo-Avito-/internal/http/trip/addposition"
 	httpcreate "github.com/kodmiq/TripGo-Avito-/internal/http/trip/create"
 	httpfinish "github.com/kodmiq/TripGo-Avito-/internal/http/trip/finish"
 	httpget "github.com/kodmiq/TripGo-Avito-/internal/http/trip/get"
+	httplist "github.com/kodmiq/TripGo-Avito-/internal/http/trip/listpositions"
 	"github.com/kodmiq/TripGo-Avito-/internal/model"
 )
 
@@ -40,6 +42,22 @@ func (unusedFinish) Finish(context.Context, uuid.UUID) (model.Trip, error) {
 	return model.Trip{}, nil
 }
 
+type unusedAdd struct{}
+
+func (unusedAdd) Add(context.Context, model.NewPosition) (model.Position, error) {
+	return model.Position{}, nil
+}
+
+type unusedCancel struct{}
+
+func (unusedCancel) Cancel(context.Context, uuid.UUID) {}
+
+type unusedList struct{}
+
+func (unusedList) List(context.Context, uuid.UUID) ([]model.Position, error) {
+	return []model.Position{}, nil
+}
+
 type unusedDB struct{}
 
 func (unusedDB) Ping(context.Context) error { return nil }
@@ -51,6 +69,8 @@ func TestInvalidTripID(t *testing.T) {
 		httpcreate.New(unusedCreate{}, log),
 		httpget.New(unusedGet{}, log),
 		httpfinish.New(unusedFinish{}, log),
+		httpadd.New(unusedAdd{}, unusedCancel{}, log),
+		httplist.New(unusedList{}, log),
 		health.New(),
 		ready.New(unusedDB{}, time.Second, log),
 		log,
